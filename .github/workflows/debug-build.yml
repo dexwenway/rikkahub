@@ -30,24 +30,37 @@ jobs:
 
       - name: Prepare build files
         run: |
-          # 创建空的google-services.json文件
+          # 创建包含debug包名的google-services.json文件
           echo '{
             "project_info": {
               "project_number": "000000000000",
               "project_id": "dummy-project",
               "storage_bucket": "dummy-bucket.appspot.com"
             },
-            "client": [{
-              "client_info": {
-                "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
-                "android_client_info": {
-                  "package_name": "me.rerere.rikkahub"
-                }
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub"
+                  }
+                },
+                "api_key": [{
+                  "current_key": "dummy_key"
+                }]
               },
-              "api_key": [{
-                "current_key": "dummy_key"
-              }]
-            }]
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000001",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub.debug"
+                  }
+                },
+                "api_key": [{
+                  "current_key": "dummy_key"
+                }]
+              }
+            ]
           }' > app/google-services.json
 
       - name: Gradle Build
