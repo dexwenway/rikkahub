@@ -37,11 +37,16 @@ object OpenAIProvider : Provider<ProviderSetting.OpenAI> {
     private val chatCompletionsAPI = ChatCompletionsAPI(client = client)
     private val responseAPI = ResponseAPI(client = client)
 
+    private fun getRandomApiKey(apiKey: String): String {
+        val keys = apiKey.split(",")
+        return keys.random()
+    }
+
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
+                .addHeader("Authorization", "Bearer ${getRandomApiKey(providerSetting.apiKey)}")
                 .get()
                 .build()
 
@@ -72,13 +77,13 @@ object OpenAIProvider : Provider<ProviderSetting.OpenAI> {
         params: TextGenerationParams
     ): Flow<MessageChunk> = if (providerSetting.useResponseApi) {
         responseAPI.streamText(
-            providerSetting = providerSetting,
+            providerSetting = providerSetting.copy(apiKey = getRandomApiKey(providerSetting.apiKey)),
             messages = messages,
             params = params
         )
     } else {
         chatCompletionsAPI.streamText(
-            providerSetting = providerSetting,
+            providerSetting = providerSetting.copy(apiKey = getRandomApiKey(providerSetting.apiKey)),
             messages = messages,
             params = params
         )
@@ -90,13 +95,13 @@ object OpenAIProvider : Provider<ProviderSetting.OpenAI> {
         params: TextGenerationParams
     ): MessageChunk = if (providerSetting.useResponseApi) {
         responseAPI.generateText(
-            providerSetting = providerSetting,
+            providerSetting = providerSetting.copy(apiKey = getRandomApiKey(providerSetting.apiKey)),
             messages = messages,
             params = params
         )
     } else {
         chatCompletionsAPI.generateText(
-            providerSetting = providerSetting,
+            providerSetting = providerSetting.copy(apiKey = getRandomApiKey(providerSetting.apiKey)),
             messages = messages,
             params = params
         )
