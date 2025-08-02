@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getSelectedTTSProvider
+import me.rerere.rikkahub.utils.stripMarkdown
 import me.rerere.tts.model.AudioFormat
 import me.rerere.tts.model.TTSRequest
 import me.rerere.tts.model.TTSResponse
@@ -33,6 +34,8 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+
+private const val TAG = "TTS"
 
 /**
  * Composable function to remember and manage custom TTS state.
@@ -137,9 +140,9 @@ private class CustomTtsStateImpl(
     private var nextChunkToSynthesize = 0
 
     // Chunking configuration
-    private val maxChunkLength = 50 // Maximum characters per chunk (only as reference)
-    private val chunkDelayMs = 0L // Delay between chunks
-    private val preSynthesisCount = 3 // Number of chunks to pre-synthesize ahead
+    private val maxChunkLength = 40 // Maximum characters per chunk (only as reference)
+    private val chunkDelayMs = 5L // Delay between chunks
+    private val preSynthesisCount = 4 // Number of chunks to pre-synthesize ahead
 
     private val _isAvailable = MutableStateFlow(false)
     override val isAvailable: StateFlow<Boolean> = _isAvailable.asStateFlow()
@@ -173,109 +176,37 @@ private class CustomTtsStateImpl(
     }
 
     private fun chunkText(text: String): List<String> {
-        if (text.length <= maxChunkLength) {
-            return listOf(text)
+        if (text.isBlank()) {
+            return emptyList()
         }
 
-        val chunks = mutableListOf<String>()
-        var startIndex = 0
+        // 1. 按段落分割
+        val paragraphs = text.split("\n\n")
 
-        while (startIndex < text.length) {
-            val endIndex = minOf(startIndex + maxChunkLength, text.length)
-            var chunkEndIndex = endIndex
+        // 正则表达式会在标点符号后分割，并保留标点
+        val punctuationRegex = "(?<=[。！？，、：;.!?:,\n])".toRegex()
 
-            // If we haven't reached the end of the text, find a proper break point
-            if (endIndex < text.length) {
-                // Priority 1: Look for sentence endings (. ! ? followed by space or newline)
-                var bestBreakPoint = -1
-
-                // Search from end backwards to find the latest possible break point
-                for (i in endIndex - 1 downTo startIndex) {
-                    val char = text.getOrNull(i)
-                    val nextChar = text.getOrNull(i + 1)
-
-                    if (char != null && (char == '.' || char == '!' || char == '?' || char == '。' || char == '！' || char == '？')) {
-                        if (nextChar == null || nextChar.isWhitespace()) {
-                            bestBreakPoint = i + 1
-                            break
+        // 2. 对每个段落进行处理，然后将结果合并
+        return paragraphs.flatMap { paragraph ->
+            if (paragraph.isBlank()) {
+                emptyList()
+            } else {
+                paragraph.stripMarkdown()
+                    .split(punctuationRegex)
+                    .asSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .fold<String, MutableList<StringBuilder>>(mutableListOf()) { acc, chunk ->
+                        if (acc.isEmpty() || acc.last().length + chunk.length > maxChunkLength) {
+                            acc.add(StringBuilder(chunk))
+                        } else {
+                            acc.last().append(chunk)
                         }
+                        acc
                     }
-                }
-
-                // Priority 2: Look for line breaks
-                if (bestBreakPoint == -1) {
-                    for (i in endIndex - 1 downTo startIndex) {
-                        val char = text.getOrNull(i)
-                        if (char == '\n' || char == '\r') {
-                            bestBreakPoint = i + 1
-                            break
-                        }
-                    }
-                }
-
-                // Priority 3: Look for other punctuation marks
-                if (bestBreakPoint == -1) {
-                    for (i in endIndex - 1 downTo startIndex) {
-                        val char = text.getOrNull(i)
-                        val nextChar = text.getOrNull(i + 1)
-
-                        if (char != null && (char == ',' || char == ';' || char == ':' || char == '，' || char == '；' || char == '：')) {
-                            if (nextChar == null || nextChar.isWhitespace()) {
-                                bestBreakPoint = i + 1
-                                break
-                            }
-                        }
-                    }
-                }
-
-                // Priority 4: Look for word boundaries (spaces)
-                if (bestBreakPoint == -1) {
-                    for (i in endIndex - 1 downTo startIndex) {
-                        if (text[i].isWhitespace()) {
-                            bestBreakPoint = i + 1
-                            break
-                        }
-                    }
-                }
-
-                // Priority 5: If still no break point found, extend search beyond maxChunkLength
-                if (bestBreakPoint == -1) {
-                    // Look ahead for the next sentence ending
-                    for (i in endIndex until text.length) {
-                        val char = text.getOrNull(i)
-                        val nextChar = text.getOrNull(i + 1)
-
-                        if (char != null && (char == '.' || char == '!' || char == '?' || char == '。' || char == '！' || char == '？')) {
-                            if (nextChar == null || nextChar.isWhitespace()) {
-                                bestBreakPoint = i + 1
-                                break
-                            }
-                        }
-
-                        // Don't search too far ahead
-                        if (i - endIndex > maxChunkLength / 2) break
-                    }
-                }
-
-                // Use the best break point found, or fall back to maxChunkLength only if absolutely necessary
-                if (bestBreakPoint != -1) {
-                    chunkEndIndex = bestBreakPoint
-                }
-            }
-
-            val chunk = text.substring(startIndex, chunkEndIndex).trim()
-            if (chunk.isNotEmpty()) {
-                chunks.add(chunk)
-            }
-
-            startIndex = chunkEndIndex
-            // Skip any remaining whitespace
-            while (startIndex < text.length && text[startIndex].isWhitespace()) {
-                startIndex++
+                    .map { it.toString() }
             }
         }
-
-        return chunks
     }
 
     override fun speak(text: String, flushCalled: Boolean) {
@@ -340,7 +271,7 @@ private class CustomTtsStateImpl(
                     if (!isActive) break
 
                     val chunk = chunks[i]
-                    Log.d("CustomTtsState", "Pre-synthesizing chunk $i: ${chunk.take(30)}...")
+                    Log.d("CustomTtsState", "Pre-synthesizing chunk $i: $chunk")
 
                     try {
                         val request = TTSRequest(text = chunk)
@@ -381,7 +312,7 @@ private class CustomTtsStateImpl(
                         if (!isActive || preSynthesisCache.containsKey(i)) continue
 
                         val chunk = allChunks[i]
-                        Log.d("CustomTtsState", "Pre-synthesizing chunk $i: ${chunk.take(30)}...")
+                        Log.d("CustomTtsState", "Pre-synthesizing chunk $i: $chunk")
 
                         try {
                             val request = TTSRequest(text = chunk)
@@ -449,7 +380,7 @@ private class CustomTtsStateImpl(
             val chunk = chunkQueue.poll() ?: break
             _currentChunk.update { chunkIndex + 1 }
 
-            Log.d("CustomTtsState", "Processing chunk ${chunkIndex + 1}/${_totalChunks.value}: ${chunk.take(50)}...")
+            Log.d("CustomTtsState", "Processing chunk ${chunkIndex + 1}/${_totalChunks.value}: $chunk")
 
             // Try to get pre-synthesized audio, fallback to real-time synthesis
             val response = try {

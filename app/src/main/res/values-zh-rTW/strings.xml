@@ -11,6 +11,8 @@
   <string name="web_search_enabled">已啟用網頁搜尋</string>
   <string name="web_search_disabled">已禁用網頁搜尋</string>
   <string name="search_picker_title">搜尋設定</string>
+  <string name="built_in_search_title">模型內建搜尋</string>
+  <string name="built_in_search_description">是否啟用模型內建的搜尋功能</string>
   <string name="photo">照片</string>
   <string name="take_picture">拍照</string>
   <string name="shortcut_take_picture">拍照提問</string>
@@ -424,6 +426,7 @@
   <string name="chat_message_tool_call_title">工具調用</string>
   <string name="chat_message_tool_call_label">調用工具 %1$s</string>
   <string name="chat_message_tool_call_result">調用結果</string>
+  <string name="chat_message_tool_search_results_count">共 %1$d 條結果</string>
   <string name="delete">刪除</string>
   <string name="setting_display_page_show_message_jumper_title">消息導航按鈕</string>
   <string name="setting_display_page_show_message_jumper_desc">在捲動聊天列表時，在右側顯示快速跳轉按鈕</string>
@@ -514,6 +517,28 @@
   <string name="history_page_search_placeholder">輸入關鍵詞搜尋聊天</string>
   <string name="history_page_new_conversation">新對話</string>
   <string name="history_page_clear">清除</string>
+
+  <!-- TTS Settings Page -->
+  <string name="setting_tts_page_title">語音合成</string>
+  <string name="setting_tts_page_add_provider">新增TTS提供商</string>
+  <string name="setting_tts_page_add">新增</string>
+  <string name="setting_tts_page_enabled">啟用</string>
+  <string name="setting_tts_page_disabled">停用</string>
+  <string name="setting_tts_page_provider_type">提供商類型</string>
+  <string name="setting_tts_page_provider_type_description">選擇TTS提供商類型</string>
+  <string name="setting_tts_page_name">名稱</string>
+  <string name="setting_tts_page_name_description">此TTS提供商的自訂名稱</string>
+  <string name="setting_tts_page_name_placeholder">輸入提供商名稱</string>
+  <string name="setting_tts_page_api_key">API金鑰</string>
+  <string name="setting_tts_page_api_key_description">您的提供商API金鑰</string>
+  <string name="setting_tts_page_base_url">基礎URL</string>
+  <string name="setting_tts_page_base_url_description">API基礎URL端點</string>
+  <string name="setting_tts_page_model">模型</string>
+  <string name="setting_tts_page_model_description">要使用的TTS模型</string>
+  <string name="setting_tts_page_voice">語音</string>
+  <string name="setting_tts_page_voice_description">用於語音合成的聲音</string>
+  <string name="setting_tts_page_voice_name">語音名稱</string>
+  <string name="setting_tts_page_voice_name_description">語音的名稱</string>
   <string name="setting_tts_page_speed">語速</string>
   <string name="setting_tts_page_speed_description">語音合成速度 (0.25 - 4.0)</string>
   <string name="setting_tts_page_speech_rate">語音速度</string>

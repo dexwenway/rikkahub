@@ -21,8 +21,8 @@ android {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26
         targetSdk = 36
-        versionCode = 77
-        versionName = "1.4.2"
+        versionCode = 79
+        versionName = "1.4.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -216,9 +216,6 @@ dependencies {
 
     // Apache Commons Text
     implementation(libs.commons.text)
-
-    // Compose Cropper
-    implementation(libs.ucrop)
 
     // Toast (Sonner)
     implementation(libs.sonner)

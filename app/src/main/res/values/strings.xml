@@ -1,6 +1,6 @@
 <resources>
   <string name="app_name">RikkaHub</string>
-  <string name="chat_input_placeholder">Type a message to chat with AI</string>
+  <string name="chat_input_placeholder">Chat with AI</string>
   <string name="editing">Editing</string>
   <string name="cancel_edit">Cancel Edit</string>
   <string name="stop">Stop</string>
@@ -10,6 +10,8 @@
   <string name="web_search_enabled">Web search enabled</string>
   <string name="web_search_disabled">Web search disabled</string>
   <string name="search_picker_title">Search Settings</string>
+  <string name="built_in_search_title">Built-in Search</string>
+  <string name="built_in_search_description">Enable model\'s built-in search functionality</string>
   <string name="photo">Photo</string>
   <string name="take_picture">Take Picture</string>
   <string name="shortcut_take_picture">Take Picture &amp; Ask</string>
@@ -493,6 +495,7 @@
   <string name="chat_message_tool_call_title">Tool Call</string>
   <string name="chat_message_tool_call_label">Called tool %1$s</string>
   <string name="chat_message_tool_call_result">Call result</string>
+  <string name="chat_message_tool_search_results_count">%1$d results</string>
 
   <!-- Backup and Restore Page -->
   <string name="backup_page_title">Backup and Restore</string>

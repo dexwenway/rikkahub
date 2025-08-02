@@ -1,12 +1,16 @@
 package me.rerere.rikkahub.ui.components.chat
 
 import android.content.Intent
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.with
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -152,6 +156,7 @@ import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.copyMessageToClipboard
+import me.rerere.rikkahub.utils.extractGeminiThinkingTitle
 import me.rerere.rikkahub.utils.formatNumber
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import me.rerere.rikkahub.utils.openUrl
@@ -225,7 +230,8 @@ fun ChatMessage(
                 annotations = message.annotations,
                 messages = conversation.currentMessages,
                 messageIndex = conversation.currentMessages.indexOf(message),
-                loading = loading
+                loading = loading,
+                model = model,
             )
         }
         AnimatedVisibility(
@@ -829,6 +835,7 @@ private fun MessageNodePagerButtons(
 @Composable
 private fun MessagePartsBlock(
     role: MessageRole,
+    model: Model?,
     parts: List<UIMessagePart>,
     annotations: List<UIMessageAnnotation>,
     messages: List<UIMessage>,
@@ -861,12 +868,7 @@ private fun MessagePartsBlock(
     val settings = LocalSettings.current
     LaunchedEffect(parts) {
         if (parts.isNotEmpty() && loading && settings.displaySetting.enableMessageGenerationHapticEffect) {
-            launch(Dispatchers.Default) {
-                repeat(3) {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    delay(80)
-                }
-            }
+            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
     }
 
@@ -874,6 +876,7 @@ private fun MessagePartsBlock(
     parts.filterIsInstance<UIMessagePart.Reasoning>().fastForEach { reasoning ->
         ReasoningCard(
             reasoning = reasoning,
+            model = model,
         )
     }
 
@@ -1116,7 +1119,7 @@ private fun ToolCallItem(
                 )
             }
             Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     text = when (toolName) {
@@ -1165,12 +1168,22 @@ private fun ToolCallItem(
                     }
                     val items = content?.jsonObject["items"]?.jsonArray ?: emptyList()
                     if (items.isNotEmpty()) {
-                        FaviconRow(
-                            urls = items.mapNotNull {
-                                it.jsonObject["url"]?.jsonPrimitiveOrNull?.contentOrNull
-                            },
-                            size = 14.dp,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            FaviconRow(
+                                urls = items.mapNotNull {
+                                    it.jsonObject["url"]?.jsonPrimitiveOrNull?.contentOrNull
+                                },
+                                size = 18.dp,
+                            )
+                            Text(
+                                text = stringResource(R.string.chat_message_tool_search_results_count, items.size),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                            )
+                        }
                     }
                 }
             }
@@ -1388,6 +1401,7 @@ enum class ReasoningCardState(val expanded: Boolean) {
 @Composable
 fun ReasoningCard(
     reasoning: UIMessagePart.Reasoning,
+    model: Model?,
     modifier: Modifier = Modifier,
     fadeHeight: Float = 64f,
 ) {
@@ -1506,6 +1520,7 @@ fun ReasoningCard(
                     tint = MaterialTheme.colorScheme.secondary,
                 )
             }
+
             if (expandState.expanded) {
                 Column(
                     modifier = Modifier
@@ -1535,7 +1550,7 @@ fun ReasoningCard(
                                             )
                                         }
                                     }
-                                    .heightIn(max = 120.dp)
+                                    .heightIn(max = 100.dp)
                                     .verticalScroll(scrollState)
                             } else {
                                 it
@@ -1552,47 +1567,27 @@ fun ReasoningCard(
                     }
                 }
             }
+
+            // 如果是gemini, 显示当前的思考标题
+            if (loading && model?.modelId?.contains("gemini") == true) {
+                val title = reasoning.reasoning.extractGeminiThinkingTitle()
+                if (title != null) {
+                    AnimatedContent(
+                        targetState = title,
+                        transitionSpec = {
+                            (slideInVertically { height -> height } + fadeIn()).togetherWith(slideOutVertically { height -> -height } + fadeOut())
+                        }
+                    ) {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier
+                                .padding(horizontal = 4.dp)
+                                .shimmer(true),
+                        )
+                    }
+                }
+            }
         }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun ReasoningCardPreview() {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp)
-    ) {
-        ReasoningCard(
-            reasoning = UIMessagePart.Reasoning(
-                """
-            Ok, I'll use the following information to answer your question:
-
-            - The current weather in New York City is sunny with a temperature of 75 degrees Fahrenheit.
-            - The current weather in Los Angeles is partly cloudy with a temperature of 68 degrees Fahrenheit.
-            - The current weather in Tokyo is rainy with a temperature of 60 degrees Fahrenheit.
-            - The current weather in Sydney is sunny with a temperature of 82 degrees Fahrenheit.
-            - The current weather in Mumbai is partly cloudy with a temperature of 70 degrees Fahrenheit.
-        """.trimIndent()
-            ),
-            modifier = Modifier.padding(8.dp),
-        )
-
-        ReasoningCard(
-            reasoning = UIMessagePart.Reasoning(
-                """
-            Ok, I'll use the following information to answer your question:
-
-            - The current weather in New York City is sunny with a temperature of 75 degrees Fahrenheit.
-            - The current weather in Los Angeles is partly cloudy with a temperature of 68 degrees Fahrenheit.
-            - The current weather in Tokyo is rainy with a temperature of 60 degrees Fahrenheit.
-            - The current weather in Sydney is sunny with a temperature of 82 degrees Fahrenheit.
-            - The current weather in Mumbai is partly cloudy with a temperature of 70 degrees Fahrenheit.
-        """.trimIndent()
-            ),
-            modifier = Modifier.padding(8.dp),
-        )
     }
 }
