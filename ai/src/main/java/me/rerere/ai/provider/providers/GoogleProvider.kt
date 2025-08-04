@@ -120,9 +120,11 @@ object GoogleProvider : Provider<ProviderSetting.Google> {
         }
     }
 
-    override suspend fun listModels(providerSetting: ProviderSetting.Google): List<Model> =
+    // 修改 listModels 方法签名，添加 context 参数
+    override suspend fun listModels(context: Context, providerSetting: ProviderSetting.Google): List<Model> =
         withContext(Dispatchers.IO) {
-            val url = buildUrl(providerSetting = providerSetting, path = "models")
+            // 方法内部实现保持不变，但需要使用 context 参数调用 buildUrl
+            val url = buildUrl(context, providerSetting = providerSetting, path = "models")
             val request = transformRequest(
                 providerSetting = providerSetting,
                 request = Request.Builder()
