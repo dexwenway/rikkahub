@@ -23,6 +23,9 @@ import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import java.util.concurrent.TimeUnit
 
+import android.content.Context
+import me.rerere.ai.util.ApiKeyRotator
+
 object OpenAIProvider : Provider<ProviderSetting.OpenAI> {
     private val client = OkHttpClient.Builder()
         .connectTimeout(120, TimeUnit.SECONDS)
@@ -41,12 +44,24 @@ object OpenAIProvider : Provider<ProviderSetting.OpenAI> {
         val keys = apiKey.split(",")
         return keys.random()
     }
-
-    override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
+    
+    // 新增顺序轮询方法，替换原有的随机选择方法
+    private fun getNextApiKey(context: Context, providerSetting: ProviderSetting.OpenAI): String {
+        return ApiKeyRotator.getNextApiKey(
+            context,
+            "openai_${providerSetting.id}",
+            providerSetting.apiKey
+        )
+    }
+    
+    override suspend fun listModels(
+        context: Context, 
+        providerSetting: ProviderSetting.OpenAI
+    ): List<Model> =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .addHeader("Authorization", "Bearer ${getRandomApiKey(providerSetting.apiKey)}")
+                .addHeader("Authorization", "Bearer ${getNextApiKey(context, providerSetting)}")
                 .get()
                 .build()
 
@@ -72,36 +87,38 @@ object OpenAIProvider : Provider<ProviderSetting.OpenAI> {
         }
 
     override suspend fun streamText(
+        context: Context,
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = if (providerSetting.useResponseApi) {
         responseAPI.streamText(
-            providerSetting = providerSetting.copy(apiKey = getRandomApiKey(providerSetting.apiKey)),
+            providerSetting = providerSetting.copy(apiKey = getNextApiKey(context, providerSetting)),
             messages = messages,
             params = params
         )
     } else {
         chatCompletionsAPI.streamText(
-            providerSetting = providerSetting.copy(apiKey = getRandomApiKey(providerSetting.apiKey)),
+            providerSetting = providerSetting.copy(apiKey = getNextApiKey(context, providerSetting)),
             messages = messages,
             params = params
         )
     }
-
+    
     override suspend fun generateText(
+        context: Context,
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk = if (providerSetting.useResponseApi) {
         responseAPI.generateText(
-            providerSetting = providerSetting.copy(apiKey = getRandomApiKey(providerSetting.apiKey)),
+            providerSetting = providerSetting.copy(apiKey = getNextApiKey(context, providerSetting)),
             messages = messages,
             params = params
         )
     } else {
         chatCompletionsAPI.generateText(
-            providerSetting = providerSetting.copy(apiKey = getRandomApiKey(providerSetting.apiKey)),
+            providerSetting = providerSetting.copy(apiKey = getNextApiKey(context, providerSetting)),
             messages = messages,
             params = params
         )
