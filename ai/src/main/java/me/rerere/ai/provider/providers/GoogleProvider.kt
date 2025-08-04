@@ -58,6 +58,7 @@ import okhttp3.sse.EventSources
 import java.util.concurrent.TimeUnit
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
+import android.content.Context
 
 private const val TAG = "GoogleProvider"
 
@@ -83,7 +84,29 @@ object GoogleProvider : Provider<ProviderSetting.Google> {
             "https://${providerSetting.location}-aiplatform.googleapis.com/v1/projects/${providerSetting.projectId}/locations/${providerSetting.location}/$path".toHttpUrl()
         }
     }
-
+    
+    // 新增顺序轮询方法
+    private fun getNextApiKey(context: Context, providerSetting: ProviderSetting.Google): String {
+        return ApiKeyRotator.getNextApiKey(
+            context,
+            "google_${providerSetting.id}",
+            providerSetting.apiKey
+        )
+    }
+    
+    // 修改buildUrl方法，使用顺序轮询
+    private fun buildUrl(context: Context, providerSetting: ProviderSetting.Google, path: String): HttpUrl {
+        return if (!providerSetting.vertexAI) {
+            "${providerSetting.baseUrl}/$path".toHttpUrl()
+                .newBuilder()
+                .addQueryParameter("key", getNextApiKey(context, providerSetting))
+                .build()
+        } else {
+            "https://${providerSetting.location}-aiplatform.googleapis.com/v1/projects/${providerSetting.projectId}/locations/${providerSetting.location}/$path".toHttpUrl()
+        }
+    }
+    
+    // 修改其他使用buildUrl的方法，替换为新的buildUrl
     private fun transformRequest(
         providerSetting: ProviderSetting.Google,
         request: Request
@@ -137,6 +160,7 @@ object GoogleProvider : Provider<ProviderSetting.Google> {
         }
 
     override suspend fun generateText(
+        context: Context,
         providerSetting: ProviderSetting.Google,
         messages: List<UIMessage>,
         params: TextGenerationParams,
@@ -144,8 +168,9 @@ object GoogleProvider : Provider<ProviderSetting.Google> {
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
-            providerSetting = providerSetting,
-            path = if (providerSetting.vertexAI) {
+            context,
+            providerSetting,
+            if (providerSetting.vertexAI) {
                 "publishers/google/models/${params.model.modelId}:generateContent"
             } else {
                 "models/${params.model.modelId}:generateContent"
@@ -193,15 +218,17 @@ object GoogleProvider : Provider<ProviderSetting.Google> {
     }
 
     override suspend fun streamText(
+        context: Context,
         providerSetting: ProviderSetting.Google,
         messages: List<UIMessage>,
-        params: TextGenerationParams,
+        params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
-            providerSetting = providerSetting,
-            path = if (providerSetting.vertexAI) {
+            context,
+            providerSetting,
+            if (providerSetting.vertexAI) {
                 "publishers/google/models/${params.model.modelId}:streamGenerateContent"
             } else {
                 "models/${params.model.modelId}:streamGenerateContent"
@@ -423,30 +450,6 @@ object GoogleProvider : Provider<ProviderSetting.Google> {
                         }
                     }
                 }
-            })
-        }
-
-        // Safety Settings
-        putJsonArray("safetySettings") {
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_HARASSMENT")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_HATE_SPEECH")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_SEXUALLY_EXPLICIT")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_DANGEROUS_CONTENT")
-                put("threshold", "OFF")
-            })
-            add(buildJsonObject {
-                put("category", "HARM_CATEGORY_CIVIC_INTEGRITY")
-                put("threshold", "OFF")
             })
         }
     }.mergeCustomBody(params.customBody)
