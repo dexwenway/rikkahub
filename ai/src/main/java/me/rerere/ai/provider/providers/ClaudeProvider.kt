@@ -56,6 +56,9 @@ import kotlin.time.Clock
 private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
 
+import android.content.Context
+import me.rerere.ai.util.ApiKeyRotator
+
 object ClaudeProvider : Provider<ProviderSetting.Claude> {
     private val client = OkHttpClient.Builder()
         .connectTimeout(120, TimeUnit.SECONDS)
@@ -72,11 +75,25 @@ object ClaudeProvider : Provider<ProviderSetting.Claude> {
         })
         .build()
 
+    private fun getRandomApiKey(apiKey: String): String {
+        val keys = apiKey.split(",")
+        return keys.random()
+    }
+    
+    // 新增顺序轮询方法，替换原有的随机选择方法
+    private fun getNextApiKey(context: Context, providerSetting: ProviderSetting.Claude): String {
+        return ApiKeyRotator.getNextApiKey(
+            context,
+            "claude_${providerSetting.id}",
+            providerSetting.apiKey
+        )
+    }
+    
     override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .addHeader("x-api-key", providerSetting.apiKey)
+                .addHeader("x-api-key", getNextApiKey(context, providerSetting))
                 .addHeader("anthropic-version", ANTHROPIC_VERSION)
                 .get()
                 .build()
@@ -113,7 +130,7 @@ object ClaudeProvider : Provider<ProviderSetting.Claude> {
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("x-api-key", providerSetting.apiKey)
+            .addHeader("x-api-key", getRandomApiKey(providerSetting.apiKey))
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -160,7 +177,7 @@ object ClaudeProvider : Provider<ProviderSetting.Claude> {
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("x-api-key", providerSetting.apiKey)
+            .addHeader("x-api-key", getRandomApiKey(providerSetting.apiKey))
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
