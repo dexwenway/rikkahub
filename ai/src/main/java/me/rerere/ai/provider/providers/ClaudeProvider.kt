@@ -13,9 +13,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
-import me.rerere.ai.model.MessageChunk
-import me.rerere.ai.model.UIMessage
-import me.rerere.ai.model.role
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
@@ -23,10 +21,15 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.openai.ChatCompletionRequest
 import me.rerere.ai.provider.providers.openai.ChatCompletionResponse
 import me.rerere.ai.provider.providers.openai.ChatMessage
+import me.rerere.ai.ui.MessageChunk
+import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessageChoice
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.ApiKeyRotator
 import me.rerere.ai.util.sse.readSse
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
+import kotlin.uuid.Uuid
 
 object ClaudeProvider : Provider<ProviderSetting.Claude> {
     private val client by lazy {
@@ -69,23 +72,44 @@ object ClaudeProvider : Provider<ProviderSetting.Claude> {
         params: TextGenerationParams
     ): MessageChunk {
         val response = client.post {
-            url(providerSetting.model.ifBlank { "https://api.anthropic.com/v1/messages" })
-            header("x-api-key", ApiKeyRotator.getNextApiKey(context, providerSetting))
+            url(providerSetting.baseUrl.ifBlank { "https://api.anthropic.com/v1/messages" })
+            header("x-api-key", ApiKeyRotator.getNextApiKey(context, "claude_${providerSetting.id}", providerSetting.apiKey))
             header("anthropic-version", "2023-06-01")
             header("Content-Type", "application/json")
             setBody(ChatCompletionRequest(
-                model = params.model,
-                messages = messages.map { 
-                    ChatMessage(role = it.role.role, content = it.content)
+                model = params.model.modelId,
+                messages = messages.map { message -> 
+                    ChatMessage(
+                        role = when(message.role) {
+                            MessageRole.USER -> "user"
+                            MessageRole.ASSISTANT -> "assistant"
+                            MessageRole.SYSTEM -> "system"
+                            MessageRole.TOOL -> "tool"
+                        },
+                        content = message.parts.filterIsInstance<UIMessagePart.Text>().joinToString(" ") { it.text }
+                    )
                 },
-                max_tokens = params.maxTokens,
-                temperature = params.temperature,
+                max_tokens = params.maxTokens ?: 1000,
+                temperature = params.temperature ?: 0.7f,
                 stream = false
             ))
         }.body<ChatCompletionResponse>()
+        
         return MessageChunk(
-            text = response.content.firstOrNull()?.text ?: "",
-            isLast = true
+            id = Uuid.random().toString(),
+            model = params.model.modelId,
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = null,
+                    message = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(UIMessagePart.Text(response.content.firstOrNull()?.text ?: ""))
+                    ),
+                    finishReason = null
+                )
+            ),
+            usage = null
         )
     }
 
@@ -96,17 +120,25 @@ object ClaudeProvider : Provider<ProviderSetting.Claude> {
         params: TextGenerationParams
     ): Flow<MessageChunk> = flow {
         val response = client.post {
-            url(providerSetting.model.ifBlank { "https://api.anthropic.com/v1/messages" })
-            header("x-api-key", ApiKeyRotator.getNextApiKey(context, providerSetting))
+            url(providerSetting.baseUrl.ifBlank { "https://api.anthropic.com/v1/messages" })
+            header("x-api-key", ApiKeyRotator.getNextApiKey(context, "claude_${providerSetting.id}", providerSetting.apiKey))
             header("anthropic-version", "2023-06-01")
             header("Content-Type", "application/json")
             setBody(ChatCompletionRequest(
-                model = params.model,
-                messages = messages.map { 
-                    ChatMessage(role = it.role.role, content = it.content)
+                model = params.model.modelId,
+                messages = messages.map { message -> 
+                    ChatMessage(
+                        role = when(message.role) {
+                            MessageRole.USER -> "user"
+                            MessageRole.ASSISTANT -> "assistant"
+                            MessageRole.SYSTEM -> "system"
+                            MessageRole.TOOL -> "tool"
+                        },
+                        content = message.parts.filterIsInstance<UIMessagePart.Text>().joinToString(" ") { it.text }
+                    )
                 },
-                max_tokens = params.maxTokens,
-                temperature = params.temperature,
+                max_tokens = params.maxTokens ?: 1000,
+                temperature = params.temperature ?: 0.7f,
                 stream = true
             ))
         }
@@ -114,10 +146,37 @@ object ClaudeProvider : Provider<ProviderSetting.Claude> {
             when(event.event) {
                 "content_block_delta" -> {
                     val data = Json.decodeFromString<ContentBlockDelta>(event.data)
-                    emit(MessageChunk(text = data.delta.text, isLast = false))
+                    emit(MessageChunk(
+                        id = Uuid.random().toString(),
+                        model = params.model.modelId,
+                        choices = listOf(
+                            UIMessageChoice(
+                                index = 0,
+                                delta = UIMessage(
+                                    role = MessageRole.ASSISTANT,
+                                    parts = listOf(UIMessagePart.Text(data.delta.text))
+                                ),
+                                message = null,
+                                finishReason = null
+                            )
+                        ),
+                        usage = null
+                    ))
                 }
                 "message_stop" -> {
-                    emit(MessageChunk(text = "", isLast = true))
+                    emit(MessageChunk(
+                        id = Uuid.random().toString(),
+                        model = params.model.modelId,
+                        choices = listOf(
+                            UIMessageChoice(
+                                index = 0,
+                                delta = null,
+                                message = null,
+                                finishReason = "stop"
+                            )
+                        ),
+                        usage = null
+                    ))
                     return@readSse
                 }
             }
