@@ -1,121 +1,137 @@
 package me.rerere.ai.provider.providers
 
-import kotlinx.coroutines.Dispatchers
+import android.content.Context
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.request.url
+import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.Json
+import me.rerere.ai.model.MessageChunk
+import me.rerere.ai.model.UIMessage
+import me.rerere.ai.model.role
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
-import me.rerere.ai.provider.providers.openai.ResponseAPI
-import me.rerere.ai.ui.MessageChunk
-import me.rerere.ai.ui.UIMessage
-import me.rerere.ai.util.await
-import me.rerere.ai.util.configureClientWithProxy
-import me.rerere.ai.util.json
+import me.rerere.ai.provider.providers.openai.ChatCompletionRequest
+import me.rerere.ai.provider.providers.openai.ChatCompletionResponse
+import me.rerere.ai.provider.providers.openai.ChatMessage
+import me.rerere.ai.util.ApiKeyRotator
+import me.rerere.ai.util.sse.readSse
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.logging.HttpLoggingInterceptor
 import java.util.concurrent.TimeUnit
 
-import android.content.Context
-import me.rerere.ai.util.ApiKeyRotator
-
-object OpenAIProvider : Provider<ProviderSetting.OpenAI> {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(120, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(120, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.HEADERS
-        })
-        .build()
-
-    private val chatCompletionsAPI = ChatCompletionsAPI(client = client)
-    private val responseAPI = ResponseAPI(client = client)
-
-    private fun getRandomApiKey(apiKey: String): String {
-        val keys = apiKey.split(",")
-        return keys.random()
-    }
-    
-    // 新增顺序轮询方法，替换原有的随机选择方法
-    private fun getNextApiKey(context: Context, providerSetting: ProviderSetting.OpenAI): String {
-        return ApiKeyRotator.getNextApiKey(
-            context,
-            "openai_${providerSetting.id}",
-            providerSetting.apiKey
-        )
-    }
-    
-    override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
-        withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url("${providerSetting.baseUrl}/models")
-                .addHeader("Authorization", "Bearer ${getNextApiKey(context, providerSetting)}")
-                .get()
-                .build()
-
-            val response =
-                client.configureClientWithProxy(providerSetting.proxy).newCall(request).await()
-            if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} ${response.body?.string()}")
+object ClaudeProvider : Provider<ProviderSetting.Claude> {
+    private val client by lazy {
+        val okHttpClient = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+        HttpClient(OkHttp) {
+            engine {
+                preconfigured = okHttpClient
             }
-
-            val bodyStr = response.body?.string() ?: ""
-            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-            val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
-
-            data.mapNotNull { modelJson ->
-                val modelObj = modelJson.jsonObject
-                val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-
-                Model(
-                    modelId = id,
-                    displayName = id,
-                )
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                })
             }
         }
+    }
+
+    override suspend fun listModels(
+        context: Context,
+        providerSetting: ProviderSetting.Claude
+    ): List<Model> {
+        // Claude API不直接提供模型列表，这里返回一些常用模型
+        return listOf(
+            Model("claude-3-opus-20240229"),
+            Model("claude-3-sonnet-20240229"),
+            Model("claude-3-haiku-20240307"),
+            Model("claude-2.1"),
+            Model("claude-2.0"),
+            Model("claude-instant-1.2")
+        )
+    }
+
+    override suspend fun generateText(
+        context: Context,
+        providerSetting: ProviderSetting.Claude,
+        messages: List<UIMessage>,
+        params: TextGenerationParams
+    ): MessageChunk {
+        val response = client.post {
+            url(providerSetting.model.ifBlank { "https://api.anthropic.com/v1/messages" })
+            header("x-api-key", ApiKeyRotator.getNextApiKey(context, providerSetting))
+            header("anthropic-version", "2023-06-01")
+            header("Content-Type", "application/json")
+            setBody(ChatCompletionRequest(
+                model = params.model,
+                messages = messages.map { 
+                    ChatMessage(role = it.role.role, content = it.content)
+                },
+                max_tokens = params.maxTokens,
+                temperature = params.temperature,
+                stream = false
+            ))
+        }.body<ChatCompletionResponse>()
+        return MessageChunk(
+            text = response.content.firstOrNull()?.text ?: "",
+            isLast = true
+        )
+    }
 
     override suspend fun streamText(
-        providerSetting: ProviderSetting.OpenAI,
+        context: Context,
+        providerSetting: ProviderSetting.Claude,
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): Flow<MessageChunk> = if (providerSetting.useResponseApi) {
-        responseAPI.streamText(
-            providerSetting = providerSetting.copy(apiKey = getNextApiKey(context, providerSetting)),
-            messages = messages,
-            params = params
-        )
-    } else {
-        chatCompletionsAPI.streamText(
-            providerSetting = providerSetting.copy(apiKey = getNextApiKey(context, providerSetting)),
-            messages = messages,
-            params = params
-        )
+    ): Flow<MessageChunk> = flow {
+        val response = client.post {
+            url(providerSetting.model.ifBlank { "https://api.anthropic.com/v1/messages" })
+            header("x-api-key", ApiKeyRotator.getNextApiKey(context, providerSetting))
+            header("anthropic-version", "2023-06-01")
+            header("Content-Type", "application/json")
+            setBody(ChatCompletionRequest(
+                model = params.model,
+                messages = messages.map { 
+                    ChatMessage(role = it.role.role, content = it.content)
+                },
+                max_tokens = params.maxTokens,
+                temperature = params.temperature,
+                stream = true
+            ))
+        }
+        readSse(response) { event ->
+            when(event.event) {
+                "content_block_delta" -> {
+                    val data = Json.decodeFromString<ContentBlockDelta>(event.data)
+                    emit(MessageChunk(text = data.delta.text, isLast = false))
+                }
+                "message_stop" -> {
+                    emit(MessageChunk(text = "", isLast = true))
+                    return@readSse
+                }
+            }
+        }
     }
-    
-    override suspend fun generateText(
-        providerSetting: ProviderSetting.OpenAI,
-        messages: List<UIMessage>,
-        params: TextGenerationParams
-    ): MessageChunk = if (providerSetting.useResponseApi) {
-        responseAPI.generateText(
-            providerSetting = providerSetting.copy(apiKey = getNextApiKey(context, providerSetting)),
-            messages = messages,
-            params = params
-        )
-    } else {
-        chatCompletionsAPI.generateText(
-            providerSetting = providerSetting.copy(apiKey = getNextApiKey(context, providerSetting)),
-            messages = messages,
-            params = params
-        )
-    }
+}
+
+@kotlinx.serialization.Serializable
+data class ContentBlockDelta(
+    val delta: Delta
+) {
+    @kotlinx.serialization.Serializable
+    data class Delta(
+        val text: String,
+        val type: String
+    )
 }
