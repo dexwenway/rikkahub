@@ -9,20 +9,24 @@ import me.rerere.ai.ui.UIMessage
 
 // 提供商实现
 // 采用无状态设计，使用时除了需要传入需要的参数外，还需要传入provider setting作为参数
+import android.content.Context
+
 interface Provider<T : ProviderSetting> {
-    suspend fun listModels(providerSetting: T): List<Model>
-
-    suspend fun generateText(
-        providerSetting: T,
-        messages: List<UIMessage>,
-        params: TextGenerationParams,
-    ): MessageChunk
-
+    suspend fun listModels(context: Context, providerSetting: T): List<Model>
+    
     suspend fun streamText(
+        context: Context,
         providerSetting: T,
         messages: List<UIMessage>,
-        params: TextGenerationParams,
+        params: TextGenerationParams
     ): Flow<MessageChunk>
+    
+    suspend fun generateText(
+        context: Context,
+        providerSetting: T,
+        messages: List<UIMessage>,
+        params: TextGenerationParams
+    ): MessageChunk
 }
 
 @Serializable
