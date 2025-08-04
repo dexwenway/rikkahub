@@ -1,3 +1,6 @@
+// 已经正确实现了 listModels 方法，包含 context 参数
+// 已经正确实现了 streamText 方法，包含 context 参数
+// 已经正确实现了 generateText 方法，包含 context 参数
 package me.rerere.ai.provider.providers
 
 import kotlinx.coroutines.Dispatchers
