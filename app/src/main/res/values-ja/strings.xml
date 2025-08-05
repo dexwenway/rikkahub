@@ -407,6 +407,7 @@
   <string name="setting_provider_page_name">名前</string>
   <string name="setting_provider_page_api_key">API Key</string>
   <string name="setting_provider_page_api_base_url">API Base Url</string>
+  <string name="setting_provider_page_api_path">APIパス</string>
   <string name="setting_provider_page_response_api">Response API</string>
   <string name="setting_provider_page_vertex_ai">Vertex AI</string>
   <string name="setting_provider_page_location">場所（例：us-central1）</string>
@@ -508,6 +509,7 @@
   <string name="no_text_content_to_copy">コピーできるテキストコンテンツがありません</string>
   <string name="share">共有</string>
   <string name="create_fork">フォークを作成</string>
+  <string name="render_with_webview">WebViewで表示</string>
 
   <!-- Assistant Picker -->
   <string name="assistant_picker_expand">展開</string>
@@ -519,6 +521,16 @@
   <string name="history_page_search_placeholder">キーワードを入力してチャットを検索</string>
   <string name="history_page_new_conversation">新しい会話</string>
   <string name="history_page_clear">クリア</string>
+  <string name="history_page_search">検索</string>
+  <string name="history_page_delete_all">すべて削除</string>
+  <string name="history_page_conversation_deleted">会話が削除されました</string>
+  <string name="history_page_undo">元に戻す</string>
+  <string name="history_page_delete_all_conversations">すべての会話を削除</string>
+  <string name="history_page_delete_all_confirmation">すべての会話を削除してもよろしいですか？この操作は元に戻せません。</string>
+  <string name="history_page_delete">削除</string>
+  <string name="history_page_cancel">キャンセル</string>
+  <string name="history_page_pin">ピン留め</string>
+  <string name="history_page_unpin">ピン留め解除</string>
 
   <!-- TTS Settings Page -->
   <string name="setting_tts_page_title">テキスト読み上げ</string>

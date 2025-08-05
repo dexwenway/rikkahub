@@ -96,6 +96,7 @@ import androidx.core.net.toFile
 import androidx.core.net.toUri
 import com.composables.icons.lucide.BookDashed
 import com.composables.icons.lucide.BookHeart
+import com.composables.icons.lucide.BookOpenText
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.ChevronRight
@@ -105,6 +106,7 @@ import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.Ellipsis
 import com.composables.icons.lucide.Expand
+import com.composables.icons.lucide.ExternalLink
 import com.composables.icons.lucide.File
 import com.composables.icons.lucide.GitFork
 import com.composables.icons.lucide.Lucide
@@ -129,6 +131,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
@@ -144,6 +147,7 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
+import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.components.ui.FaviconRow
@@ -155,6 +159,7 @@ import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.JsonInstantPretty
+import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.copyMessageToClipboard
 import me.rerere.rikkahub.utils.extractGeminiThinkingTitle
 import me.rerere.rikkahub.utils.formatNumber
@@ -194,6 +199,9 @@ fun ChatMessage(
     )
     var showActionsSheet by remember { mutableStateOf(false) }
     var showSelectCopySheet by remember { mutableStateOf(false) }
+    val navController = LocalNavController.current
+    val context = LocalContext.current
+    val colorScheme = MaterialTheme.colorScheme
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
@@ -265,6 +273,20 @@ fun ChatMessage(
             onSelectAndCopy = {
                 showSelectCopySheet = true
             },
+            onWebViewPreview = {
+                val textContent = message.parts
+                    .filterIsInstance<UIMessagePart.Text>()
+                    .joinToString("\n\n") { it.text }
+                    .trim()
+                if (textContent.isNotBlank()) {
+                    val htmlContent = buildMarkdownPreviewHtml(
+                        context = context,
+                        markdown = textContent,
+                        colorScheme = colorScheme
+                    )
+                    navController.navigate(Screen.WebView(content = htmlContent.base64Encode()))
+                }
+            },
             onDismissRequest = {
                 showActionsSheet = false
             }
@@ -290,6 +312,7 @@ private fun LongPressActionsSheet(
     onShare: () -> Unit,
     onFork: () -> Unit,
     onSelectAndCopy: () -> Unit,
+    onWebViewPreview: () -> Unit,
     onDismissRequest: () -> Unit
 ) {
     ModalBottomSheet(
@@ -330,6 +353,37 @@ private fun LongPressActionsSheet(
                 }
             }
 
+            // WebView Preview (only show if message has text content)
+            val hasTextContent = message.parts.filterIsInstance<UIMessagePart.Text>()
+                .any { it.text.isNotBlank() }
+
+            if (hasTextContent) {
+                Card(
+                    onClick = {
+                        onDismissRequest()
+                        onWebViewPreview()
+                    },
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Lucide.BookOpenText,
+                            contentDescription = null,
+                            modifier = Modifier.padding(4.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.render_with_webview),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                }
+            }
 
             // Edit
             Card(
@@ -1569,7 +1623,7 @@ fun ReasoningCard(
             }
 
             // 如果是gemini, 显示当前的思考标题
-            if (loading && model?.modelId?.contains("gemini") == true) {
+            if (loading && model != null && ModelRegistry.GEMINI_SERIES.match(model.modelId)) {
                 val title = reasoning.reasoning.extractGeminiThinkingTitle()
                 if (title != null) {
                     AnimatedContent(
