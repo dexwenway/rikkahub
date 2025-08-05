@@ -17,6 +17,25 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Setup Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Setup google-services.json for debug build
+        run: |
+          if [ ! -f app/google-services.json ]; then
+            echo "Creating google-services.json from template for debug build..."
+            cp app/google-services.json.template app/google-services.json
+          else
+            echo "google-services.json already exists"
+          fi
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
@@ -24,13 +43,20 @@ jobs:
         run: ./gradlew --version  # 添加日志：输出Gradle版本以验证环境
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug  # 构建debug APK
+        run: ./gradlew assembleDebug --stacktrace --info
 
-      - name: Log APK path
-        run: find app/build/outputs/apk -name '*.apk'  # 添加日志：输出APK路径以验证构建输出
+      - name: List build outputs
+        run: |
+          echo "=== Build outputs ==="
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
+          echo "=== App build directory ==="
+          ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug APK directory not found"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk  # 假设主模块为app，调整如果需要
+          name: debug-apk-${{ github.run_number }}
+          path: |
+            app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 30
