@@ -66,23 +66,39 @@ jobs:
         run: chmod +x gradlew
 
       - name: Log Gradle version
-        run: ./gradlew --version  # 添加日志：输出Gradle版本以验证环境
+        run: ./gradlew --version
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace --info
+      - name: Clean project
+        run: ./gradlew clean
 
+      - name: Build debug APK with detailed logs
+        run: ./gradlew assembleDebug --stacktrace --info --debug
+        
       - name: List build outputs
+        if: always()
         run: |
           echo "=== Build outputs ==="
           find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
           echo "=== App build directory ==="
           ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug APK directory not found"
+          echo "=== Build logs ==="
+          find app/build -name "*.log" -type f -exec ls -la {} \; 2>/dev/null || echo "No log files found"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: debug-apk-${{ github.run_number }}
           path: |
             app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
           retention-days: 30
+          
+      - name: Upload build logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-logs-${{ github.run_number }}
+          path: |
+            app/build/reports/**/*
+            app/build/outputs/logs/**/*
+          retention-days: 7
