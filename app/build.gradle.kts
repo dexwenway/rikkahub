@@ -10,17 +10,18 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
-    alias(libs.plugins.chaquo.python)
+    // 暂时注释掉 Chaquopy 插件
+    // alias(libs.plugins.chaquo.python)
 }
 
 android {
     namespace = "me.rerere.rikkahub"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 81
         versionName = "1.4.7"
 
@@ -122,6 +123,8 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// 注释掉 Chaquopy 配置
+/*
 chaquopy {
     defaultConfig {
         version = "3.12"
@@ -131,6 +134,7 @@ chaquopy {
         }
     }
 }
+*/
 
 dependencies {
     implementation(libs.androidx.core.ktx)
